@@ -5,7 +5,7 @@
 -- Command channel   noctalia.state["command"] -> { action = "on" | "off" | "toggle"
 --                                                        | "refresh" | "set-mic", mic = ... }
 --
--- The tile, the bar widget and the device panel are thin clients: they render
+-- The tile and the bar widget are thin clients: they render
 -- "status" and write "command". Switching off moves the default source (and every
 -- capture stream) back to the physical microphone, which leaves the RNNoise
 -- filter-chain without a consumer, so PipeWire suspends the whole graph and no DSP

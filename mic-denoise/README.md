@@ -167,7 +167,7 @@ The denoised source "rnnoise_source" is not listed: it is the output, not a micr
 
 | 键 | 类型 | 默认 | 说明 |
 |---|---|---|---|
-| `hardware_source` | string | 空 | 物理麦克风的源名称；留空自动（上次使用输入）。可点「设备」按钮查看可选名称 |
+| `hardware_source` | string | 空 | 物理麦克风的源名称；留空自动（上次使用输入）。`pactl list short sources` 可列出候选 |
 | `source` | string | `rnnoise_source` | 虚拟降噪源名称，须与配置里的 `node.name` 一致 |
 | `poll_interval` | int | `2000` | 状态刷新间隔（毫秒，下限 500） |
 
