@@ -63,13 +63,29 @@ raw_source() {
     auto_raw
 }
 
-# move every capture stream that reads from source $1 onto source $2
+# Source-output indices that record from source $1, skipping the filter-chain's
+# own capture stream: moving that one onto the virtual source would turn the
+# filter input into its own output.
+consumer_outputs_of() { # $1 = source index
+    pactl list source-outputs 2>/dev/null | awk -v want="$1" '
+        /^Source Output #[0-9]+/ { idx = $3; sub(/^#/, "", idx); src = ""; filter = 0; next }
+        /^[[:space:]]*Source: [0-9]+/ { if (src == "") src = $2 }
+        /node[.]name = "capture[.]rnnoise_source"/ { filter = 1 }
+        /^[[:space:]]*$/ {
+            if (src == want && !filter) { print idx; seen = 1 }
+            src = ""; filter = 0
+        }
+        END { if (src == want && !filter) print idx }
+    '
+}
+
+# Move every consumer that reads from source $1 onto source $2.
 move_streams() {
     from=$(idx_of "$1")
     to=$(idx_of "$2")
     [ -n "$from" ] && [ -n "$to" ] || return 0
     [ "$from" = "$to" ] && return 0
-    for so in $(pactl list short source-outputs 2>/dev/null | awk -v f="$from" '$2 == f { print $1 }'); do
+    for so in $(consumer_outputs_of "$from"); do
         pactl move-source-output "$so" "$to" >/dev/null 2>&1 || true
     done
 }
@@ -82,8 +98,8 @@ capture_output_idx() {
     pactl list source-outputs 2>/dev/null | awk '
         /^Source Output #[0-9]+/ { idx = $3; sub(/^#/, "", idx); hit = 0; next }
         /node[.]name = "capture[.]rnnoise_source"/ { hit = 1 }
-        /^[[:space:]]*$/ { if (hit && idx != "") { print idx; exit } }
-        END { if (hit && idx != "") print idx }
+        /^[[:space:]]*$/ { if (hit && idx != "") { print idx; printed = 1; exit } }
+        END { if (!printed && hit && idx != "") print idx }
     '
 }
 

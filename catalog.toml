@@ -7,12 +7,12 @@
 [[plugin]]
 id = "goldesquemoon/mic-denoise"
 name = "Mic Denoise"
-version = "1.3.0"
+version = "1.3.1"
 author = "goldesquemoon"
 license = "MIT"
 icon = "microphone"
 description = "Toggle RNNoise microphone noise suppression from the control center or the bar."
-plugin_api = 17
+plugin_api = 24
 deprecated = false
 tags = ["audio", "utility"]
 dependencies = ["pipewire", "noise-suppression-for-voice", "libpulse"]
