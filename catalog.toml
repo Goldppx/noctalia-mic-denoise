@@ -1,0 +1,18 @@
+# This file is auto-generated upstream. Do not edit manually.
+# Noctalia plugins catalog.
+# Index of every plugin this source ships: the minimum needed to render, search,
+# and compat-check the list. The per-plugin plugin.toml stays authoritative; the
+# host re-reads it on enable. Keep one [[plugin]] row per plugin subdirectory.
+
+[[plugin]]
+id = "goldesquemoon/mic-denoise"
+name = "Mic Denoise"
+version = "1.0.0"
+author = "goldesquemoon"
+license = "MIT"
+icon = "microphone"
+description = "Toggle RNNoise microphone noise suppression from the control center or the bar."
+plugin_api = 17
+deprecated = false
+tags = ["audio", "utility"]
+dependencies = ["pipewire", "noise-suppression-for-voice", "libpulse"]

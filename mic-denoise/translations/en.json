@@ -1,0 +1,42 @@
+{
+  "settings": {
+    "source": {
+      "label": "Denoised source",
+      "description": "Name of the virtual PipeWire source created by the bundled filter-chain config."
+    },
+    "hardware_source": {
+      "label": "Microphone",
+      "description": "Source to fall back to when denoising is off. Leave empty to reuse the last microphone or the first available input."
+    },
+    "poll_interval": {
+      "label": "Refresh interval (ms)",
+      "description": "How often the tile and widget re-read the current state."
+    }
+  },
+  "shortcut": {
+    "label-on": "Denoise On",
+    "label-off": "Denoise Off"
+  },
+  "widget": {
+    "tooltip": {
+      "state": "Noise suppression",
+      "input": "Input"
+    }
+  },
+  "notify": {
+    "config-installed": {
+      "title": "Mic Denoise ready",
+      "body": "PipeWire filter-chain config installed. Restart PipeWire once, then toggle denoising on."
+    },
+    "failed": {
+      "title": "Mic Denoise failed",
+      "body": "The audio backend reported no details."
+    },
+    "timeout": {
+      "body": "pactl did not answer in time; is PipeWire running?"
+    },
+    "spawn-failed": {
+      "body": "Could not run the bundled backend script."
+    }
+  }
+}

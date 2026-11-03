@@ -1,0 +1,42 @@
+{
+  "settings": {
+    "source": {
+      "label": "降噪输入源",
+      "description": "插件自带的 filter-chain 配置所创建的虚拟 PipeWire 输入源名称。"
+    },
+    "hardware_source": {
+      "label": "麦克风设备",
+      "description": "关闭降噪时切回的输入源。留空则沿用上次使用的麦克风，或自动选择第一个可用输入。"
+    },
+    "poll_interval": {
+      "label": "刷新间隔（毫秒）",
+      "description": "磁贴与挂件重新读取当前状态的频率。"
+    }
+  },
+  "shortcut": {
+    "label-on": "降噪开",
+    "label-off": "降噪关"
+  },
+  "widget": {
+    "tooltip": {
+      "state": "降噪状态",
+      "input": "输入源"
+    }
+  },
+  "notify": {
+    "config-installed": {
+      "title": "麦克风降噪已就绪",
+      "body": "已安装 PipeWire filter-chain 配置。请重启一次 PipeWire，然后打开降噪。"
+    },
+    "failed": {
+      "title": "麦克风降噪操作失败",
+      "body": "音频后端没有返回详细原因。"
+    },
+    "timeout": {
+      "body": "pactl 超时未响应，PipeWire 是否在运行？"
+    },
+    "spawn-failed": {
+      "body": "无法运行插件自带的后端脚本。"
+    }
+  }
+}

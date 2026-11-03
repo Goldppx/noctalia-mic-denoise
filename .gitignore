@@ -1,0 +1,4 @@
+# Local editor support file (fetch instructions in README)
+noctalia.d.luau
+.DS_Store
+*.swp
