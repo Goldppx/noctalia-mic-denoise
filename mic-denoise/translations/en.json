@@ -4,13 +4,13 @@
       "label": "Denoised source",
       "description": "Name of the virtual PipeWire source created by the bundled filter-chain config."
     },
-    "hardware_source": {
-      "label": "Microphone",
-      "description": "Source to fall back to when denoising is off. Leave empty to reuse the last microphone or the first available input."
-    },
     "poll_interval": {
       "label": "Refresh interval (ms)",
       "description": "How often the tile and widget re-read the current state."
+    },
+    "hardware_source": {
+      "label": "Microphone",
+      "description": "Source name of the physical microphone; leave empty for automatic (last used input, then the first available one). To see the names, run \"pactl list short sources\" in a terminal - the microphone is an alsa_input.* entry."
     }
   },
   "shortcut": {
@@ -37,6 +37,10 @@
     },
     "spawn-failed": {
       "body": "Could not run the bundled backend script."
+    },
+    "mic-changed": {
+      "title": "Microphone changed",
+      "body": "PipeWire was reloaded with the new capture device."
     }
   }
 }

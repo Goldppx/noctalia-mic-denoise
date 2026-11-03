@@ -1,5 +1,43 @@
 # Mic Denoise
 
+Real-time RNNoise noise suppression for your microphone on PipeWire, toggled from the Noctalia control center, the bar, or a keybind.
+
+## Plugin
+
+| Field | Value |
+| --- | --- |
+| ID | `goldesquemoon/mic-denoise` |
+| Entries | Service: `state`; shortcut: `denoise`; bar widget: `mic-denoise` |
+
+RNNoise microphone noise suppression for PipeWire: the default source follows a virtual
+filter-chain source while denoising is on, and switches back to the raw microphone when it is
+off, which leaves the chain without a consumer so PipeWire suspends it.
+
+## Requirements
+
+| Requirement | Why |
+| --- | --- |
+| `pipewire` | Carries the filter-chain that does the denoising. |
+| `noise-suppression-for-voice` | Provides the `librnnoise_ladspa.so` plugin the chain loads. |
+| `libpulse` | `pactl` switches the default source and moves capture streams. |
+
+## Usage
+
+Add the tile under **Settings -> Control center -> Shortcuts -> Mic Denoise**, or toggle it with
+`noctalia msg plugin goldesquemoon/mic-denoise:state all toggle`. The optional `mic-denoise` bar
+widget shows the same state. Pick the physical microphone in the settings; leave it empty for
+automatic detection.
+
+## Settings
+
+| Setting | Type | Default | Description |
+| --- | --- | --- | --- |
+| `hardware_source` | `string` | empty | Microphone to fall back to when denoising is off. Empty reuses the last one or picks the first input. |
+| `source` | `string` | `rnnoise_source` | Virtual source created by the bundled filter-chain config. |
+| `poll_interval` | `int` | `2000` | State refresh interval in milliseconds (minimum 500). |
+
+## 中文说明
+
 Noctalia 插件：一键开关 **RNNoise 实时麦克风降噪**（PipeWire `filter-chain`）。
 
 - **控制中心磁贴**：Home 页一键切换；蓝色高亮 = 降噪开启；右键跳到音频页
@@ -80,8 +118,48 @@ systemctl --user restart pipewire.service pipewire-pulse.service wireplumber.ser
 // niri
 binds {
     Mod+Shift+M { spawn "noctalia" "msg" "plugin" "goldesquemoon/mic-denoise:state" "all" "toggle"; }
+    Mod+Shift+D { spawn "alacritty" "-e" "sh" "-c" "pactl list short sources; read -r _"; }
 }
 ```
+
+## 麦克风设备
+
+麦克风在**插件设置**里填一个源名称，留空即自动（上次使用的输入 → 第一个可用输入）：
+
+```
+设置 → 插件 → Mic Denoise → 麦克风设备
+```
+
+**不知道设备名？** 在终端执行：
+
+```sh
+pactl list short sources      # 麦克风就是 alsa_input.* 那一行
+```
+
+固定用某个设备（多麦克风/插拔场景）：
+
+```sh
+pactl list short sources | awk '$2 !~ /[.]monitor$/ {print $2}'
+```
+
+如果插件装在这台机器的 `~/dev/noctalia-plugins`，也可以直接用自带脚本列出：
+
+```sh
+sh ~/dev/noctalia-plugins/mic-denoise/assets/mic-denoise.sh list
+```
+
+```
+Available inputs (put one of these names into the plugin setting "Microphone"):
+
+  alsa_input.pci-0000_05_00.6.analog-stereo   [current default]
+      Ryzen HD Audio Controller 模拟立体声
+
+The denoised source "rnnoise_source" is not listed: it is the output, not a microphone.
+```
+
+改了设置并保存后，`onConfigChanged` 会把新设备写进 filter-chain 的采集目标
+（`node.target`）并重载一次 PipeWire（约 1 秒静音），然后恢复原来的开/关状态；
+如果填的正是当前已在用的设备，则跳过重载。磁贴/挂件右键可直接跳到插件设置。
 
 ## 设置
 
@@ -89,8 +167,8 @@ binds {
 
 | 键 | 类型 | 默认 | 说明 |
 |---|---|---|---|
+| `hardware_source` | string | 空 | 物理麦克风的源名称；留空自动（上次使用输入）。可点「设备」按钮查看可选名称 |
 | `source` | string | `rnnoise_source` | 虚拟降噪源名称，须与配置里的 `node.name` 一致 |
-| `hardware_source` | string | 空 | 关闭时切回的麦克风；留空则沿用上次记录或自动探测 |
 | `poll_interval` | int | `2000` | 状态刷新间隔（毫秒，下限 500） |
 
 调降噪力度：改 `~/.config/pipewire/pipewire.conf.d/50-mic-denoise.conf` 里的
@@ -100,11 +178,12 @@ binds {
 
 ```
                      ┌──────────── [[service]] state ────────────┐
-                     │  轮询 pactl · 生成配置 · 执行 backend      │
+                     │  轮询 pactl · 生成配置 · 切换设备 · backend │
                      └───────┬───────────────────────▲──────────┘
       noctalia.state "status"│                       │"command"
                              ▼                       │
-              [[shortcut]] denoise          [[widget]] mic-denoise
+              [[shortcut]] denoise            [[widget]] mic-denoise
+                   (开/关)                    (开/关 + 状态)
 ```
 
 - 单一事实来源：`[[service]]` 拥有全部逻辑；磁贴与挂件只渲染状态、写入命令
@@ -130,7 +209,7 @@ binds {
 | 有个「操作失败」通知 | 通知正文即原因；常见是 `/usr/lib/ladspa/librnnoise_ladspa.so` 缺失（装 `noise-suppression-for-voice`） |
 | 虚拟源不存在 | 配置写了但没重启 PipeWire：`systemctl --user restart pipewire`；仍不行看 `journalctl --user -u pipewire -b` |
 | 关闭后 CPU 仍在跑 | 有程序仍钉在虚拟源上：`pactl list short source-outputs`；脚本会自动搬移，但程序可能自己切回去 |
-| 换了麦克风后降噪无声 | 改配置里的 `node.target`，或在设置里填 `hardware_source`，重启 PipeWire |
+| 换了麦克风后降噪无声 | 在设置里填新的麦克风名并保存（自动重写 `node.target` 并重载一次 PipeWire） |
 | 磁贴显示英文 | 当前 locale 无对应翻译文件；`zh-Hans.json` 覆盖简体中文 |
 
 ## 卸载

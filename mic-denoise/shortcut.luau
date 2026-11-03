@@ -27,7 +27,7 @@ function onClick()
     noctalia.state.set("command", { action = on and "off" or "on", seq = noctalia.nowMs() })
 end
 
--- Right click opens the built-in audio tab, where the device picker lives.
+-- Right click opens the plugin settings, where the microphone is configured.
 function onRightClick()
-    noctalia.runAsync("noctalia msg panel-open control-center audio")
+    noctalia.openSettings()
 end

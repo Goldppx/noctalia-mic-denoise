@@ -1,74 +1,169 @@
-# Noctalia Mic Denoise
+# Noctalia Mic Denoise — RNNoise microphone noise suppression for PipeWire (Noctalia v5 plugin)
 
-[Noctalia](https://noctalia.dev) v5 插件：[`mic-denoise`](mic-denoise/README.md) —— RNNoise 实时麦克风降噪，
-在控制中心/栏一键开关，关闭时 **零 DSP 开销**。
+A [Noctalia](https://noctalia.dev) v5 plugin that turns real-time **RNNoise microphone noise
+suppression** on and off from the control-center tile, the optional bar widget, or a keybind.
+It works by switching the PipeWire **default source** between the raw microphone and a virtual
+`filter-chain` source, so when denoising is off nothing consumes the chain and PipeWire suspends
+it — no DSP work, no CPU cost, no battery drain.
 
-本仓库按官方 `/noctalia-dev/official-plugins` 与 `/noctalia-dev/community-plugins`
-的目录规范组织，可直接作为 `path` / `git` 源使用，也可提交到社区插件商店。
-
-```
-catalog.toml          # 源索引：每个插件一行 [[plugin]]
-.luaurc               # Luau languageMode = nonstrict
-.vscode/settings.json
-install.sh            # 注册本仓库为 path 源并启用插件（无需 root）
-uninstall.sh          # 卸载（--purge 同时删除生成的 PipeWire 配置）
-tests/smoke.sh        # 清单/入口/翻译/后端自检（CI 也跑这个）
-.github/workflows/    # checks
-mic-denoise/          # 目录名 = 插件 id 中 "/" 之后的部分
-```
-
-## 安装
+![Mic Denoise](mic-denoise/thumbnail.webp)
 
 ```sh
-git clone https://github.com/Goldppx/noctalia-mic-denoise.git
-cd noctalia-mic-denoise
-./install.sh            # 依赖检查 + 注册源 + 启用插件
-./install.sh --restart  # 若虚拟源尚未加载，顺便重启 PipeWire
-sh tests/smoke.sh       # 自检
+pactl list short sources | grep rnnoise    # the virtual source is live
 ```
 
-依赖（Arch / CachyOS）：
+## Features
+
+- **One-click toggle** in the control center (and an optional bar widget) for RNNoise denoising
+- **Zero CPU when off**: the filter-chain has no consumer, so PipeWire suspends the whole graph
+- **No feedback loops**: the capture side is pinned to the physical microphone when the config is
+  generated, so pointing the default source at the virtual one can never create a loop
+- **Automatic microphone choice**: falls back to the last used input, or the first available one
+- **Existing recordings follow you**: every capture stream is moved along when the default source
+  changes, so apps keep working mid-call
+- CLI-independent: everything is `pactl` + one generated PipeWire snippet, no daemon to babysit
+
+## Requirements
+
+| Requirement | Why |
+| --- | --- |
+| `pipewire` (≥ 1.0) | Carries the filter-chain that runs RNNoise. |
+| `noise-suppression-for-voice` | Provides `librnnoise_ladspa.so`, the LADSPA plugin the chain loads. |
+| `libpulse` (`pactl`) | Switches the default source and moves capture streams. |
+| Noctalia v5 | Provides the control-center tile and the plugin runtime. |
+
+Arch / CachyOS:
 
 ```sh
 sudo pacman -S pipewire noise-suppression-for-voice libpulse
 ```
 
-完整依赖树见 [mic-denoise/README.md](mic-denoise/README.md#最小依赖树)。
-
-## 验证与合规
+## Install
 
 ```sh
-noctalia plugins lint mic-denoise   # 0 errors / 0 warnings
-sh tests/smoke.sh                   # all checks passed
+git clone https://github.com/Goldppx/noctalia-mic-denoise.git
+cd noctalia-mic-denoise
+./install.sh            # register the source + enable the plugin (no root needed)
+./install.sh --restart  # also restart PipeWire if the virtual source is not loaded yet
 ```
 
-| 规范项 | 状态 |
-|---|---|
-| 清单必填字段（id/name/version/plugin_api/author/license） | ✅ `plugin_api = 17` |
-| 目录名 = id 后缀（`mic-denoise/`） | ✅ |
-| 入口：`[[service]]` `[[shortcut]]` `[[widget]]`，id 唯一 | ✅ |
-| 插件级 `[[setting]]`（`label_key` / `description_key` / `min`） | ✅ 3 项 |
-| `translations/en.json` 为源字符串 | ✅ 另有 `zh-Hans.json` |
-| `README.md` + `thumbnail.webp` + `LICENSE` | ✅ |
-| `catalog.toml` 索引 | ✅ |
-| service 独占逻辑、UI 入口走 `noctalia.state` 命令通道 | ✅ 与官方 `screen_recorder` 同构 |
+`install.sh` is idempotent: it checks `noctalia`/`pactl`/`pw-cli`, warns when
+`librnnoise_ladspa.so` is missing, registers this checkout as a plugin source, enables
+`goldesquemoon/mic-denoise`, waits for the generated PipeWire snippet and reports whether the
+virtual source is live.
 
-## 开发
+Manual install:
 
 ```sh
-noctalia plugins lint mic-denoise
-sh tests/smoke.sh
-noctalia msg config-reload                      # 改了 plugin.toml 后
-noctalia msg plugin goldesquemoon/mic-denoise:state all toggle   # 直接驱动 service
+noctalia msg plugins source add my-plugins path /path/to/noctalia-mic-denoise
+noctalia msg plugins enable goldesquemoon/mic-denoise
 ```
 
-编辑器补全（官方 API 类型定义不进仓库）：
+Then add the tile under **Settings → Control center → Shortcuts → Mic Denoise**, or in
+`~/.config/noctalia/config.toml`:
+
+```toml
+[[control_center.shortcuts]]
+type = "goldesquemoon/mic-denoise:denoise"
+```
+
+## Usage
+
+| Entry | Type | What it does |
+| --- | --- | --- |
+| `denoise` | control-center shortcut | Toggles denoising; highlighted means on. Right click opens the audio control-center tab. |
+| `mic-denoise` | bar widget | Same state and toggle from the bar; the tooltip shows the current input. |
+| `state` | service | Owns the logic, polls `pactl`, publishes state for the two clients above. |
+
+Keybind example (niri):
+
+```kdl
+Mod+Shift+M { spawn "noctalia" "msg" "plugin" "goldesquemoon/mic-denoise:state" "all" "toggle"; }
+```
+
+Command line:
 
 ```sh
-curl -fsSL -o noctalia.d.luau \
-  https://raw.githubusercontent.com/noctalia-dev/official-plugins/main/noctalia.d.luau
+noctalia msg plugin goldesquemoon/mic-denoise:state all toggle
+pactl get-default-source
 ```
 
-## 许可
+## Settings
 
-MIT，见 [LICENSE](LICENSE)。
+| Setting | Type | Default | Description |
+| --- | --- | --- | --- |
+| `hardware_source` | `string` | empty | Microphone to switch back to when denoising is off. Empty reuses the last one, or picks the first available input. |
+| `source` | `string` | `rnnoise_source` | Name of the virtual source created by the generated filter-chain config. |
+| `poll_interval` | `int` | `2000` | How often the tile and widget re-read the state, in milliseconds (minimum 500). |
+
+Denoising strength lives in the generated snippet
+`~/.config/pipewire/pipewire.conf.d/50-mic-denoise.conf`: raise or lower
+`VAD Threshold (%)` (default 87) and restart PipeWire.
+
+## How it works
+
+```
+physical microphone ──► filter-chain (RNNoise) ──► virtual source "Mic Denoise (RNNoise)"
+                              ▲
+                              └── consumed only while it is the default source;
+                                  otherwise the whole graph is suspended
+```
+
+The service publishes status through the plugin state, the tile and widget are thin clients, and
+the only privileged-free action it takes is `pactl set-default-source` plus
+`pactl move-source-output` for open streams.
+
+## FAQ
+
+**Does it add latency?** The chain runs with a 1024-sample buffer at 48 kHz (about 21 ms). Keep it
+if you notice echo; the value is in the generated snippet.
+
+**Is my microphone still being processed when denoising is off?** No. With denoising off the
+virtual source has no consumer, PipeWire suspends the filter-chain, and the raw microphone is the
+default source again.
+
+**Does it work with Bluetooth headsets and USB microphones?** Yes — any PipeWire source works. Set
+`hardware_source` to the device you want to fall back to.
+
+**The tile is greyed out.** The virtual source does not exist yet: reload PipeWire with
+`systemctl --user restart pipewire.service pipewire-pulse.service wireplumber.service`.
+
+**Will it fight other tools that change the default source?** Some apps re-select their own input.
+The plugin moves existing streams, but a program that hard-codes the raw device afterwards wins —
+that is expected.
+
+## 中文说明
+
+RNNoise 实时麦克风降噪的 Noctalia v5 插件：控制中心磁贴 / 栏挂件 / 键位一键开关。
+
+- 关闭时把默认源切回物理麦克风并把所有录音流搬回去，降噪链路没有任何消费者，
+  PipeWire 直接挂起整条 graph —— **零 DSP 开销**
+- 首次运行自动生成 `~/.config/pipewire/pipewire.conf.d/50-mic-denoise.conf`，把采集端钉在当时的
+  物理麦克风上，避免改默认源时形成回环
+- 设置项：`hardware_source`（关闭时切回的麦克风，留空自动）、`source`（虚拟源名称）、
+  `poll_interval`（刷新间隔）
+- 需要 `pipewire`、`noise-suppression-for-voice`、`libpulse`
+
+安装：
+
+```sh
+git clone https://github.com/Goldppx/noctalia-mic-denoise.git
+cd noctalia-mic-denoise
+./install.sh --restart
+```
+
+## Search terms / 关键词
+
+Noctalia plugin, Noctalia v5, RNNoise, microphone noise suppression, noise gate, background noise
+removal, PipeWire filter-chain, LADSPA, noise-suppression-for-voice, pactl, default source,
+Wayland, Niri, Hyprland, Sway, Arch Linux, CachyOS, 麦克风降噪, 实时降噪, 噪声抑制, 控制中心磁贴, 栏挂件
+
+## Links
+
+- Plugin source: [`mic-denoise/`](mic-denoise/)
+- Noctalia: <https://noctalia.dev>
+- Community plugin store: <https://noctalia.dev/plugins>
+
+## License
+
+MIT

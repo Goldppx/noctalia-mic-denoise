@@ -10,7 +10,7 @@
 
 id          = "goldesquemoon/mic-denoise"
 name        = "Mic Denoise"
-version     = "1.0.0"
+version     = "1.2.1"
 plugin_api  = 17
 author      = "goldesquemoon"
 license     = "MIT"
@@ -21,18 +21,18 @@ tags        = ["audio", "utility"]
 dependencies = ["pipewire", "noise-suppression-for-voice", "libpulse"]
 
 [[setting]]
-key         = "source"
-type        = "string"
-label_key   = "settings.source.label"
-description_key = "settings.source.description"
-default     = "rnnoise_source"
-
-[[setting]]
 key         = "hardware_source"
 type        = "string"
 label_key   = "settings.hardware_source.label"
 description_key = "settings.hardware_source.description"
 default     = ""
+
+[[setting]]
+key         = "source"
+type        = "string"
+label_key   = "settings.source.label"
+description_key = "settings.source.description"
+default     = "rnnoise_source"
 
 [[setting]]
 key         = "poll_interval"
@@ -53,3 +53,4 @@ entry = "shortcut.luau"
 [[widget]]
 id    = "mic-denoise"
 entry = "widget.luau"
+

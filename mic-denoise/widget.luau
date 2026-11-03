@@ -32,5 +32,5 @@ function onClick()
 end
 
 function onRightClick()
-    noctalia.runAsync("noctalia msg panel-open control-center audio")
+    noctalia.openSettings()
 end

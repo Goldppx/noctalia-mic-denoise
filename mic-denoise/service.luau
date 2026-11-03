@@ -2,15 +2,20 @@
 -- Mic Denoise - headless service (single owner of all logic).
 --
 -- Published state   noctalia.state["status"]  -> { enabled, available, default, raw }
--- Command channel   noctalia.state["command"] -> { action = "on" | "off" | "toggle" | "refresh" }
+-- Command channel   noctalia.state["command"] -> { action = "on" | "off" | "toggle"
+--                                                        | "refresh" | "set-mic", mic = ... }
 --
--- The tile and the bar widget are thin clients: they render "status" and write
--- "command". Switching off moves the default source (and every capture stream)
--- back to the physical microphone, which leaves the RNNoise filter-chain without
--- a consumer, so PipeWire suspends the whole graph and no DSP work happens.
+-- The tile, the bar widget and the device panel are thin clients: they render
+-- "status" and write "command". Switching off moves the default source (and every
+-- capture stream) back to the physical microphone, which leaves the RNNoise
+-- filter-chain without a consumer, so PipeWire suspends the whole graph and no DSP
+-- work happens.
+--
+-- Choosing a microphone rewrites the filter-chain capture target and reloads
+-- PipeWire once, because the capture target is read at module load.
 
 local SOURCE = tostring(noctalia.getConfig("source") or "rnnoise_source")
-local RAW_PREF = tostring(noctalia.getConfig("hardware_source") or "")
+local MIC = tostring(noctalia.getConfig("hardware_source") or "")
 local INTERVAL = tonumber(noctalia.getConfig("poll_interval")) or 2000
 if INTERVAL < 500 then
     INTERVAL = 500
@@ -18,6 +23,8 @@ end
 
 -- A hung pactl must never wedge the service in a permanent "busy" state.
 local CMD_TIMEOUT_MS = 8000
+-- set-mic restarts PipeWire and waits for the socket to come back.
+local SET_MIC_TIMEOUT_MS = 60000
 
 local PLUGIN_DIR = noctalia.pluginDir() or "."
 local SCRIPT = PLUGIN_DIR .. "/assets/mic-denoise.sh"
@@ -26,13 +33,17 @@ local CONF_PATH = noctalia.expandPath("~/.config/pipewire/pipewire.conf.d/50-mic
 
 local status = nil
 local busy = false
-local pending = nil -- latest queued work: { kind = "status" } or { kind = "action", action = ... }
+local pending = nil -- { kind = "status" } | { kind = "action", action = ... } | { kind = "setmic", mic = ... }
 local lastError = nil
 local configState = "pending" -- pending | present | written | failed
 
 local function log(msg)
     noctalia.log(`mic-denoise: {msg}`)
 end
+
+-- Microphone from the "hardware_source" setting; empty means "let the backend
+-- decide" (last used input, or the first one available).
+local micPref = MIC
 
 local function reportError(detail)
     if detail == nil or detail == "" then
@@ -82,9 +93,10 @@ local function publish(st)
     noctalia.state.set("status", st)
 end
 
--- The snippet is machine specific: the capture side is pinned to the physical
+-- The snippet is machine specific: the capture side is pinned to a physical
 -- microphone so pointing the default source at the virtual one cannot loop.
--- Generated once from the bundled template, never overwritten afterwards.
+-- Generated once from the bundled template, only rewritten on an explicit
+-- microphone change (see the set-mic command).
 local function ensurePipewireConfig(st)
     if configState == "present" or configState == "written" then
         return
@@ -137,10 +149,15 @@ function dispatch()
     pending = nil
 
     local argv
-    if item.kind == "action" then
-        argv = { "sh", SCRIPT, item.action, SOURCE, RAW_PREF, DATA_DIR }
-    else
-        argv = { "sh", SCRIPT, "status", SOURCE, RAW_PREF, DATA_DIR }
+    local timeout = CMD_TIMEOUT_MS
+    if item.kind == "status" then
+        argv = { "sh", SCRIPT, "status", SOURCE, micPref, DATA_DIR }
+    elseif item.kind == "action" then
+        argv = { "sh", SCRIPT, item.action, SOURCE, micPref, DATA_DIR }
+    else -- setmic
+        local want = (status and status.enabled) and "1" or "0"
+        argv = { "sh", SCRIPT, "set-mic", SOURCE, item.mic, DATA_DIR, CONF_PATH, want }
+        timeout = SET_MIC_TIMEOUT_MS
     end
 
     busy = true
@@ -156,14 +173,19 @@ function dispatch()
                 local st = parseStatus(res.stdout)
                 ensurePipewireConfig(st)
                 publish(st)
+            elseif item.kind == "setmic" then
+                -- keep micPref in sync with what the backend actually pinned
+                micPref = item.mic
+                noctalia.notify(noctalia.tr("notify.mic-changed.title"), noctalia.tr("notify.mic-changed.body"))
             end
         end
-        -- A switch always ends with a fresh status so the UI reflects reality.
-        if item.kind == "action" and pending == nil then
+        -- Any switch or microphone change ends with a fresh status so the UI
+        -- reflects reality instead of an optimistic guess.
+        if item.kind ~= "status" and pending == nil then
             pending = { kind = "status" }
         end
         dispatch()
-    end, CMD_TIMEOUT_MS)
+    end, timeout)
 
     if not started then
         busy = false
@@ -176,8 +198,7 @@ local function request(item)
     dispatch()
 end
 
--- `on` and `off` are no-ops when the switch is already in that position, so they
--- are safe to expose as idempotent actions.
+-- `on` and `off` are idempotent in the backend, so they are safe to expose.
 noctalia.state.watch("command", function(command)
     if type(command) ~= "table" then
         return
@@ -185,6 +206,8 @@ noctalia.state.watch("command", function(command)
     local action = command.action
     if action == "on" or action == "off" or action == "toggle" then
         request({ kind = "action", action = action })
+    elseif action == "set-mic" then
+        request({ kind = "setmic", mic = tostring(command.mic or "") })
     elseif action == "refresh" then
         request({ kind = "status" })
     end
@@ -192,6 +215,16 @@ end)
 
 function update()
     request({ kind = "status" })
+end
+
+-- Editing the "Microphone" setting rewrites the filter-chain capture target and
+-- reloads PipeWire once (the target is read at module load).
+function onConfigChanged()
+    local nextMic = tostring(noctalia.getConfig("hardware_source") or "")
+    if nextMic ~= micPref then
+        micPref = nextMic
+        request({ kind = "setmic", mic = nextMic })
+    end
 end
 
 noctalia.setUpdateInterval(INTERVAL)
@@ -210,9 +243,11 @@ end
 
 -- Manual trigger, handy for keybinds and for testing the state channel:
 --   noctalia msg plugin goldesquemoon/mic-denoise:state all toggle
-function onIpc(event)
+function onIpc(event, payload)
     if event == "on" or event == "off" or event == "toggle" then
         request({ kind = "action", action = event })
+    elseif event == "set-mic" then
+        request({ kind = "setmic", mic = tostring(payload or "") })
     elseif event == "refresh" then
         request({ kind = "status" })
     end
