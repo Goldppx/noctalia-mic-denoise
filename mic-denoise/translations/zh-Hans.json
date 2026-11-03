@@ -40,7 +40,16 @@
     },
     "mic-changed": {
       "title": "麦克风已切换",
-      "body": "已用新的采集设备重载 PipeWire。"
+      "body": "降噪链路已改为从新的麦克风采集。",
+      "body-restarted": "已重启 PipeWire，让降噪链路加载新的采集目标。"
+    },
+    "ladspa": {
+      "title": "缺少 noise-suppression-for-voice",
+      "body": "找不到 RNNoise 的 LADSPA 插件，虚拟降噪源无法存在。请安装 noise-suppression-for-voice，重启 PipeWire，然后重新打开降噪。"
+    },
+    "not-ready": {
+      "title": "麦克风降噪未就绪",
+      "body": "虚拟降噪源不存在。重启 PipeWire 让 filter-chain 加载：systemctl --user restart pipewire pipewire-pulse wireplumber"
     }
   }
 }

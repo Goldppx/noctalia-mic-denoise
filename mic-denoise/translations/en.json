@@ -40,7 +40,16 @@
     },
     "mic-changed": {
       "title": "Microphone changed",
-      "body": "PipeWire was reloaded with the new capture device."
+      "body": "The filter-chain now captures from the new microphone.",
+      "body-restarted": "PipeWire was restarted so the filter-chain loads the new capture target."
+    },
+    "ladspa": {
+      "title": "Mic Denoise needs noise-suppression-for-voice",
+      "body": "The RNNoise LADSPA plugin is missing, so the denoised source cannot exist. Install noise-suppression-for-voice, restart PipeWire, then enable denoising again."
+    },
+    "not-ready": {
+      "title": "Mic Denoise is not ready",
+      "body": "The denoised source is missing. Restart PipeWire to load the filter-chain: systemctl --user restart pipewire pipewire-pulse wireplumber"
     }
   }
 }

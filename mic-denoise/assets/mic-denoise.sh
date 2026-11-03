@@ -27,7 +27,17 @@ state_file=""
 choice_file=""
 [ -n "$data_dir" ] && choice_file="$data_dir/hardware_source"
 
-sources() { pactl list short sources 2>/dev/null || true; }
+# One `pactl list short sources` per run: status() runs every poll and each pactl
+# call opens a connection to the daemon.
+sources() {
+    if [ -n "${sources_cache:-}" ]; then
+        printf '%s\n' "$sources_cache"
+    else
+        pactl list short sources 2>/dev/null || true
+    fi
+}
+
+prime_sources() { sources_cache=$(pactl list short sources 2>/dev/null || true); }
 
 idx_of() { sources | awk -v n="$1" '$2 == n { print $1; exit }'; }
 
@@ -62,6 +72,39 @@ move_streams() {
     for so in $(pactl list short source-outputs 2>/dev/null | awk -v f="$from" '$2 == f { print $1 }'); do
         pactl move-source-output "$so" "$to" >/dev/null 2>&1 || true
     done
+}
+
+# The filter-chain capture side shows up as a recording stream of the physical
+# microphone, so it can be moved to another microphone at runtime instead of
+# reloading the module (which used to cost a PipeWire restart and a second of
+# silence).
+capture_output_idx() {
+    pactl list source-outputs 2>/dev/null | awk '
+        /^Source Output #[0-9]+/ { idx = $3; sub(/^#/, "", idx); hit = 0; next }
+        /node[.]name = "capture[.]rnnoise_source"/ { hit = 1 }
+        /^[[:space:]]*$/ { if (hit && idx != "") { print idx; exit } }
+        END { if (hit && idx != "") print idx }
+    '
+}
+
+move_capture() { # $1 = microphone name
+    mic_idx=$(idx_of "$1")
+    out_idx=$(capture_output_idx)
+    [ -n "$mic_idx" ] && [ -n "$out_idx" ] || return 1
+    pactl move-source-output "$out_idx" "$mic_idx" >/dev/null 2>&1 || return 1
+    now=$(pactl list source-outputs 2>/dev/null | awk -v want="$out_idx" '
+        $0 == "Source Output #" want { found = 1; next }
+        found && /^[[:space:]]*Source: / { print $2; exit }
+    ')
+    [ "$now" = "$mic_idx" ]
+}
+
+# Cheap readiness hints: the virtual source is missing, but why?
+ladspa_missing() {
+    [ -e /usr/lib/ladspa/librnnoise_ladspa.so ] && return 1
+    [ -e /usr/lib64/ladspa/librnnoise_ladspa.so ] && return 1
+    [ -e "$HOME/.local/lib/ladspa/librnnoise_ladspa.so" ] && return 1
+    return 0
 }
 
 remember_raw() {
@@ -105,11 +148,21 @@ rewrite_target() { # mic
 
 case "$action" in
 status)
+    prime_sources
     current=$(default_source)
     if [ "$current" = "$denoised" ]; then echo "enabled=1"; else echo "enabled=0"; fi
     echo "default=$current"
-    if has_source "$denoised"; then echo "available=1"; else echo "available=0"; fi
     echo "denoised=$denoised"
+    if has_source "$denoised"; then
+        echo "available=1"
+    else
+        echo "available=0"
+        if ladspa_missing; then
+            echo "hint=ladspa-missing"
+        else
+            echo "hint=source-missing"
+        fi
+    fi
     echo "raw=$(raw_source)"
     ;;
 devices | list)
@@ -197,8 +250,13 @@ set-mic)
 
     rewrite_target "$mic"
 
-    systemctl --user restart pipewire.service pipewire-pulse.service wireplumber.service >/dev/null 2>&1 || true
-    wait_audio || { echo "error=PipeWire did not come back after restart" >&2; exit 1; }
+    if move_capture "$mic"; then
+        reloaded=0
+    else
+        systemctl --user restart pipewire.service pipewire-pulse.service wireplumber.service >/dev/null 2>&1 || true
+        wait_audio || { echo "error=PipeWire did not come back after restart" >&2; exit 1; }
+        reloaded=1
+    fi
 
     if [ "$want" = "1" ]; then
         sh "$0" on "$denoised" "$mic" "$data_dir" >/dev/null || true
@@ -206,7 +264,7 @@ set-mic)
         sh "$0" off "$denoised" "$mic" "$data_dir" >/dev/null || true
     fi
     echo "mic=$mic"
-    echo "reloaded=1"
+    echo "reloaded=$reloaded"
     ;;
 *)
     echo "usage: $0 [status|devices|on|off|toggle|set-mic] <denoised> <mic> <data-dir> [conf] [want]" >&2

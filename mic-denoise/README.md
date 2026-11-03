@@ -34,7 +34,7 @@ automatic detection.
 | --- | --- | --- | --- |
 | `hardware_source` | `string` | empty | Microphone to fall back to when denoising is off. Empty reuses the last one or picks the first input. |
 | `source` | `string` | `rnnoise_source` | Virtual source created by the bundled filter-chain config. |
-| `poll_interval` | `int` | `2000` | State refresh interval in milliseconds (minimum 500). |
+| `poll_interval` | `int` | `5000` | State refresh interval in milliseconds (minimum 500). Toggles refresh immediately; the tick only catches changes made elsewhere. |
 
 ## 中文说明
 
@@ -169,7 +169,7 @@ The denoised source "rnnoise_source" is not listed: it is the output, not a micr
 |---|---|---|---|
 | `hardware_source` | string | 空 | 物理麦克风的源名称；留空自动（上次使用输入）。`pactl list short sources` 可列出候选 |
 | `source` | string | `rnnoise_source` | 虚拟降噪源名称，须与配置里的 `node.name` 一致 |
-| `poll_interval` | int | `2000` | 状态刷新间隔（毫秒，下限 500） |
+| `poll_interval` | int | `5000` | 状态刷新间隔（毫秒，下限 500）。点击/键位会立即刷新，轮询只用来发现别处做的改动 |
 
 调降噪力度：改 `~/.config/pipewire/pipewire.conf.d/50-mic-denoise.conf` 里的
 `VAD Threshold (%)`（默认 87；调低更灵敏、调高更安静），然后重启 PipeWire。

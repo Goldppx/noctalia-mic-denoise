@@ -94,7 +94,7 @@ pactl get-default-source
 | --- | --- | --- | --- |
 | `hardware_source` | `string` | empty | Microphone to switch back to when denoising is off. Empty reuses the last one, or picks the first available input. |
 | `source` | `string` | `rnnoise_source` | Name of the virtual source created by the generated filter-chain config. |
-| `poll_interval` | `int` | `2000` | How often the tile and widget re-read the state, in milliseconds (minimum 500). |
+| `poll_interval` | `int` | `5000` | How often the tile and widget re-read the state, in milliseconds (minimum 500). Toggles refresh immediately; the tick only catches changes made elsewhere. |
 
 Denoising strength lives in the generated snippet
 `~/.config/pipewire/pipewire.conf.d/50-mic-denoise.conf`: raise or lower
@@ -117,6 +117,14 @@ the only privileged-free action it takes is `pactl set-default-source` plus
 
 **Does it add latency?** The chain runs with a 1024-sample buffer at 48 kHz (about 21 ms). Keep it
 if you notice echo; the value is in the generated snippet.
+
+**Does changing the microphone interrupt my call?** Normally not: the plugin repoints the
+filter-chain's live capture stream, so the switch is seamless. PipeWire is only restarted when
+that stream cannot be moved.
+
+**The tile is greyed out and I get a notification.** That is the readiness hint: either
+`librnnoise_ladspa.so` is missing (install `noise-suppression-for-voice`) or the filter-chain has
+not been loaded yet (restart PipeWire).
 
 **Is my microphone still being processed when denoising is off?** No. With denoising off the
 virtual source has no consumer, PipeWire suspends the filter-chain, and the raw microphone is the

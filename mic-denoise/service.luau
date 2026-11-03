@@ -16,7 +16,7 @@
 
 local SOURCE = tostring(noctalia.getConfig("source") or "rnnoise_source")
 local MIC = tostring(noctalia.getConfig("hardware_source") or "")
-local INTERVAL = tonumber(noctalia.getConfig("poll_interval")) or 2000
+local INTERVAL = tonumber(noctalia.getConfig("poll_interval")) or 5000
 if INTERVAL < 500 then
     INTERVAL = 500
 end
@@ -62,7 +62,7 @@ local function clearError()
 end
 
 local function parseStatus(out)
-    local st = { enabled = false, available = false, default = "", raw = "" }
+    local st = { enabled = false, available = false, default = "", raw = "", hint = "" }
     for line in (out or ""):gmatch("[^\r\n]+") do
         local key, value = line:match("^([%w_]+)=(.*)$")
         if key == "enabled" then
@@ -73,6 +73,8 @@ local function parseStatus(out)
             st.default = value
         elseif key == "raw" then
             st.raw = value
+        elseif key == "hint" then
+            st.hint = value
         end
     end
     return st
@@ -91,6 +93,25 @@ local function publish(st)
         return
     end
     noctalia.state.set("status", st)
+end
+
+-- "available=0" alone is not actionable: say why once per distinct reason.
+local lastHint = nil
+
+local function notifyHint(st)
+    if st.available then
+        lastHint = nil
+        return
+    end
+    if st.hint == "" or st.hint == lastHint then
+        return
+    end
+    lastHint = st.hint
+    if st.hint == "ladspa-missing" then
+        noctalia.notify(noctalia.tr("notify.ladspa.title"), noctalia.tr("notify.ladspa.body"))
+    else
+        noctalia.notify(noctalia.tr("notify.not-ready.title"), noctalia.tr("notify.not-ready.body"))
+    end
 end
 
 -- The snippet is machine specific: the capture side is pinned to a physical
@@ -173,10 +194,17 @@ function dispatch()
                 local st = parseStatus(res.stdout)
                 ensurePipewireConfig(st)
                 publish(st)
+                notifyHint(st)
             elseif item.kind == "setmic" then
                 -- keep micPref in sync with what the backend actually pinned
                 micPref = item.mic
-                noctalia.notify(noctalia.tr("notify.mic-changed.title"), noctalia.tr("notify.mic-changed.body"))
+                -- The backend repoints the live filter-chain stream and only
+                -- restarts PipeWire when that is not possible.
+                local restarted = tostring(res.stdout or ""):match("reloaded=(%d)") == "1"
+                noctalia.notify(
+                    noctalia.tr("notify.mic-changed.title"),
+                    noctalia.tr(restarted and "notify.mic-changed.body-restarted" or "notify.mic-changed.body")
+                )
             end
         end
         -- Any switch or microphone change ends with a fresh status so the UI
