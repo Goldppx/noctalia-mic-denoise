@@ -194,7 +194,12 @@ function dispatch()
 end
 
 local function request(item)
-    pending = item -- latest request wins; never dropped while another command runs
+    -- A periodic status refresh must never swallow a queued user action: while a
+    -- command is still running, keep the action and let the next tick refresh.
+    if item.kind == "status" and pending ~= nil and pending.kind ~= "status" then
+        return
+    end
+    pending = item -- otherwise the latest request wins
     dispatch()
 end
 
@@ -236,7 +241,14 @@ function onExit(_signal, reason)
     if reason ~= "disable" and reason ~= "uninstall" then
         return
     end
-    if status and status.enabled and status.raw ~= "" then
+    if not status or not status.enabled then
+        return
+    end
+    if reason == "disable" then
+        -- The backend also moves capture streams back; on uninstall the plugin
+        -- directory may already be going away, so only restore the default then.
+        noctalia.runAsync({ "sh", SCRIPT, "off", SOURCE, micPref, DATA_DIR })
+    elseif status.raw ~= "" then
         noctalia.runAsync({ "pactl", "set-default-source", status.raw })
     end
 end

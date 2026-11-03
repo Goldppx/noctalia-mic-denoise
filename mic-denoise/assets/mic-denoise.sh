@@ -112,7 +112,7 @@ status)
     echo "denoised=$denoised"
     echo "raw=$(raw_source)"
     ;;
-list)
+devices | list)
     # human readable listing for the terminal button
     current=$(default_source)
     echo "Available inputs (put one of these names into the plugin setting \"Microphone\"):"
