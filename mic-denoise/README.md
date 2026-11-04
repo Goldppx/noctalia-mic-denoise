@@ -142,10 +142,11 @@ pactl list short sources      # 麦克风就是 alsa_input.* 那一行
 pactl list short sources | awk '$2 !~ /[.]monitor$/ {print $2}'
 ```
 
-如果插件装在这台机器的 `~/dev/noctalia-plugins`，也可以直接用自带脚本列出：
+如果是从本地 checkout 的插件源安装的，也可以直接用自带脚本列出（在源目录
+`noctalia-plugins/` 下执行）：
 
 ```sh
-sh ~/dev/noctalia-plugins/mic-denoise/assets/mic-denoise.sh list
+sh mic-denoise/assets/mic-denoise.sh list
 ```
 
 ```
