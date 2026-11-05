@@ -40,6 +40,10 @@ sudo pacman -S pipewire noise-suppression-for-voice libpulse
 
 ## Install
 
+**The easiest way is the Noctalia plugin store**: Settings -> Plugins -> Store -> search
+*Mic Denoise* -> install (only `noise-suppression-for-voice` has to be installed first). The
+instructions below are for a source checkout.
+
 ```sh
 git clone https://github.com/Goldppx/noctalia-mic-denoise.git
 cd noctalia-mic-denoise
